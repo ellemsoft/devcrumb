@@ -1,0 +1,290 @@
+[
+  {
+    "type": "gotcha",
+    "summary": "Cloudflare Workers outbound fetch() blocks raw IP addresses (error 1003) and strips non-standard ports → use a hostname via DNS record. Port must be in Cloudflare's supported list (80, 443, 8080, 8443, etc). Same-zone grey-cloud DNS records work for non-standard ports.",
+    "tags": ["cloudflare-workers"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Cloudflare Workers module-level singletons persist across requests in the same isolate but env bindings differ per request → never cache clients that depend on env vars at module level. Create fresh per request.",
+    "tags": ["cloudflare-workers", "serverless"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Cloudflare Workers in-memory caching (Map, global variables) is useless — each request may run in a different isolate. Use KV or Cache API for persistence across requests.",
+    "tags": ["cloudflare-workers", "caching"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "@supabase/supabase-js assumes Supabase-specific URL paths (/rest/v1/) → for raw PostgREST, use @supabase/postgrest-js directly. Same query API (.from(), .rpc(), .select()) without the path assumptions.",
+    "tags": ["supabase", "postgrest", "typescript"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "PostgREST role switching requires GRANT target_role TO authenticator_role. Without it, every request fails with 'permission denied to set role'. Easy to miss during setup.",
+    "tags": ["postgrest", "postgresql"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "PostgREST connection string with special characters in password breaks parsing (password chars interpreted as port/host) → use hex-only passwords (openssl rand -hex 32) or URL-encode the password.",
+    "tags": ["postgrest", "postgresql"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "OAuth state parameter must be cryptographically signed (HMAC-SHA256), not just base64 encoded. Plain base64 lets attackers craft arbitrary redirect URIs and steal tokens.",
+    "tags": ["oauth", "security"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Zod v4 z.record() requires two arguments: z.record(keySchema, valueSchema). Zod v3 accepted one argument. Upgrading silently breaks record schemas at compile time.",
+    "tags": ["zod", "typescript"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Cloudflare Workers AI bge-small-en-v1.5 produces 384-dimension embeddings (not 1536 like OpenAI). pgvector column must be vector(384). Using wrong dimension silently produces bad search results.",
+    "tags": ["cloudflare-workers-ai", "pgvector", "embeddings"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Hetzner Cloud Firewall is separate from OS-level ufw. Both must be configured. Hetzner firewall filters before traffic reaches the server (better), ufw filters at the OS (backup layer).",
+    "tags": ["hetzner", "firewall", "security"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Flutter dart:io Platform.isAndroid breaks web builds — dart:io not available on web. Use defaultTargetPlatform from foundation.dart which is web-safe.",
+    "tags": ["flutter", "dart", "web"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Flutter Drift .customStatement() for DELETE doesn't trigger stream cache invalidation — active watchAll() streams won't update. Use .customUpdate() or Drift's typed delete methods instead.",
+    "tags": ["flutter", "drift", "sqlite"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Flutter Drift table named 'Movies' generates row class 'Movy', 'Series' generates 'Sery'. Drift uses English singularization rules. All queries and imports must use the generated names.",
+    "tags": ["flutter", "drift", "codegen"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Flutter Drift import conflicts with test matchers — must import with 'hide isNotNull, isNull' to avoid ambiguity with test framework matchers.",
+    "tags": ["flutter", "drift", "testing"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Flutter Drift import conflicts with Flutter Column widget — must import with 'hide Column' when used alongside Flutter's Column in the same file.",
+    "tags": ["flutter", "drift"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Android PopScope broken on Android 14+ (targetSdk 34+) — default OnBackInvokedCallback overrides Flutter's PopScope. Fix: set android:enableOnBackInvokedCallback=\"false\" in AndroidManifest.xml.",
+    "tags": ["flutter", "android"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "VLC player events (isPlaying, playingState) unreliable for IPTV live streams — false stall detection, error overlays while audio plays. Use position advancement as ground truth instead of state events.",
+    "tags": ["flutter", "vlc", "iptv", "streaming"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Flutter HeroController shared across multiple Navigators causes animation conflicts. Wrap nested Navigators in HeroControllerScope.none to isolate hero animations.",
+    "tags": ["flutter", "navigation", "hero-animations"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Flutter Riverpod: watching filtered providers for category counts returns counts that change with search query. Watch unfiltered source providers for true totals.",
+    "tags": ["flutter", "riverpod", "state-management"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Flutter TTS rapid button taps drop words due to queue race condition → implement async Queue with sequential processing. Also stop/clear queue on sentence clear.",
+    "tags": ["flutter", "tts", "concurrency"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Flutter .cast<>() on JSON arrays is unsafe — panics on type mismatch. Use .whereType<>() for safe filtering that skips non-matching elements.",
+    "tags": ["flutter", "dart", "json"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Flutter immersive mode resets on app resume (Android). Must re-apply SystemChrome settings in AppLifecycleListener resume callback.",
+    "tags": ["flutter", "android", "system-ui"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "PostgreSQL shared_buffers on shared VPS — don't allocate 1GB on a 4GB box running other services. 512MB caches a <100MB database entirely. Over-allocation starves other processes.",
+    "tags": ["postgresql", "performance", "vps"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "PostgreSQL default random_page_cost (4.0) assumes spinning disk. On SSD set to 1.1 with effective_io_concurrency=200. Wrong settings cause query planner to avoid index scans.",
+    "tags": ["postgresql", "performance", "ssd"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "SvelteKit SPA on Cloudflare Pages — hard refresh on /route causes 404 instead of SPA shell. Add _redirects file: '/* /index.html 200' or use adapter-static with fallback.",
+    "tags": ["sveltekit", "cloudflare-pages", "spa"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "JavaScript bitwise operations default to signed 32-bit. Flutter uses unsigned 32-bit ARGB for colors. Hex-to-color conversion must use unsigned right shift (>>> 0) to match.",
+    "tags": ["javascript", "flutter", "color-conversion"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Godot 4.x Android plugin discovery requires <meta-data> tag in AndroidManifest.xml. Without it, plugin code is bundled but Engine.get_singleton() returns null at runtime.",
+    "tags": ["godot", "android", "plugins"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Godot exports with 'Apple Distribution' code signing but Xcode debug builds expect 'Apple Development' → code signing conflict after every export. Workaround: sed -i to replace in pbxproj after export.",
+    "tags": ["godot", "ios", "xcode", "code-signing"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Godot regenerates exports/ios/ on each export, wiping custom Podfile. Keep master Podfile elsewhere, copy before pod install.",
+    "tags": ["godot", "ios", "cocoapods"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Firebase GoogleService-Info.plist must be added to Xcode project AFTER pod install, not before. Wrong order causes Firebase initialization failures.",
+    "tags": ["firebase", "ios", "xcode", "cocoapods"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Google Play Billing Library 8.0+ requires queryProductDetails() before purchase(). Without it, purchase returns DEVELOPER_ERROR (code 5). Cache product details on billing connection.",
+    "tags": ["android", "google-play-billing", "in-app-purchase"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Godot ConfigFile.get_value() returns untyped Array — cannot assign to Array[String] in GDScript. Silently fails. Must explicitly cast: result as Array[String].",
+    "tags": ["godot", "gdscript"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Android Firebase dependencies in Godot plugins must be declared in TWO places: plugin's build.gradle.kts with compileOnly(), AND Godot export plugin's _get_android_dependencies(). Missing either causes runtime crash.",
+    "tags": ["godot", "android", "firebase", "gradle"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Go state cache TOCTOU race: multiple RLock acquisitions when reading cache allows state to change between reads. Use single lock acquisition per read operation.",
+    "tags": ["go", "concurrency", "race-condition"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "DateTime stored as local wall clock but compared with .toUtc() causes double-conversion (1-2h offset). If times are already local, compare local-to-local without timezone conversion.",
+    "tags": ["dart", "datetime", "timezone"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Cloudflare Pages SPA: add _headers file to prevent HTML caching while keeping immutable hashed assets cached forever. Without it, users get stale HTML after deploys.",
+    "tags": ["cloudflare-pages", "caching", "spa"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "SQLite LIKE queries with backslash escaping silently fail without ESCAPE clause. Must add ESCAPE '\\' to every LIKE that uses backslash-escaped wildcards.",
+    "tags": ["sqlite", "sql"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "iOS Network Extensions (VPN, content filters) do not work in iOS Simulator — requires physical device for testing. No workaround.",
+    "tags": ["ios", "network-extension", "vpn"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "GDPR consent must be propagated to ALL mediation networks (Unity Ads, etc), not just the primary ad SDK. Missing propagation causes individual consent dialogs to appear.",
+    "tags": ["admob", "gdpr", "mediation", "mobile-ads"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Flutter animation callback .then() can fire after widget dispose → crash. Always add mounted check (if (mounted)) before reversing or modifying state in animation callbacks.",
+    "tags": ["flutter", "animation", "lifecycle"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "API rate limiting: never trust Content-Length header for payload size validation. Check actual body size after reading. Content-Length can be spoofed or missing.",
+    "tags": ["api", "security", "rate-limiting"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "NOT IN subquery in PostgreSQL is less efficient than NOT EXISTS for large tables. NOT EXISTS can use anti-join optimization and stop at first match. Use NOT EXISTS for exclusion queries.",
+    "tags": ["postgresql", "sql", "performance"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Flutter Riverpod v2 provider state persists across builds — must explicitly reset nav stack, caches, and dependent state when switching contexts (profiles, boards, imports).",
+    "tags": ["flutter", "riverpod", "state-management"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "MCP tool descriptions are the ONLY way LLMs know when to call tools. Include: when to call, when NOT to call, what it returns, and an example. Max ~1024 chars for Claude compatibility.",
+    "tags": ["mcp", "tool-design", "llm"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "MCP tool annotations (readOnlyHint, destructiveHint, idempotentHint) help clients decide whether to auto-approve. Set them — even though clients don't all use them yet, it's forward-compatible.",
+    "tags": ["mcp", "tool-design"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Fastlane skip_upload_metadata must be true for Google Play uploads — false risks overwriting manually managed store listing metadata with stale local data.",
+    "tags": ["fastlane", "google-play", "android"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "Flutter share_plus v10.x API changed: use Share.shareXFiles() static method, not SharePlus.instance. Breaking change not obvious from error messages.",
+    "tags": ["flutter", "share-plus"],
+    "trust_score": 5
+  },
+  {
+    "type": "gotcha",
+    "summary": "pgvector HNSW index only works with specific distance operators. vector_cosine_ops for cosine similarity (<=>), vector_l2_ops for L2 distance (<->). Wrong operator ignores the index.",
+    "tags": ["pgvector", "postgresql", "embeddings"],
+    "trust_score": 5
+  }
+]
