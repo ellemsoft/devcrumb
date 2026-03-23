@@ -48,10 +48,76 @@ app.get("/", (c) => {
 	return c.text("DevCrumb MCP Server");
 });
 
+const CORS = { "Access-Control-Allow-Origin": "https://devcrumb.dev" };
+const ENTRY_COLUMNS = "short_id, summary, tags, trust_score, created_at";
+
+async function cachedRoute(c: { req: { url: string }; executionCtx: ExecutionContext }, build: () => Promise<Response>): Promise<Response> {
+	const cache = caches.default;
+	const cacheKey = new Request(c.req.url);
+	const cached = await cache.match(cacheKey);
+	if (cached) return cached;
+	const res = await build();
+	c.executionCtx.waitUntil(cache.put(cacheKey, res.clone()));
+	return res;
+}
+
+app.get("/stats", async (c) => {
+	try {
+		return await cachedRoute(c, async () => {
+			const db = getDb(c.env);
+			const { count: entries } = await db.from("entries").select("id", { count: "exact", head: true }).eq("is_public", true);
+			return c.json({ entries: entries ?? 0 }, 200, { ...CORS, "Cache-Control": "public, max-age=3600" });
+		});
+	} catch {
+		return c.json({ entries: 0 }, 200, { ...CORS, "Cache-Control": "no-store" });
+	}
+});
+
+app.get("/tags", async (c) => {
+	try {
+		return await cachedRoute(c, async () => {
+			const db = getDb(c.env);
+			const { data } = await db.rpc("get_top_tags", { limit_count: 50 });
+			const tags = ((data ?? []) as { tag: string }[])
+				.map((r) => r.tag)
+				.filter((t): t is string => typeof t === "string" && t !== "general");
+			return c.json({ tags }, 200, { ...CORS, "Cache-Control": "public, max-age=3600" });
+		});
+	} catch {
+		return c.json({ tags: [] }, 200, { ...CORS, "Cache-Control": "no-store" });
+	}
+});
+
+app.get("/entry/random", async (c) => {
+	try {
+		const db = getDb(c.env);
+		const { data } = await db.rpc("get_random_entry");
+		if (!data) return c.json({ error: "No entries found" }, 404, CORS);
+		return c.json(data, 200, CORS);
+	} catch {
+		return c.json({ error: "Failed to fetch entry" }, 500, CORS);
+	}
+});
+
+app.get("/entry/:id", async (c) => {
+	try {
+		const db = getDb(c.env);
+		const { data, error } = await db.from("entries")
+			.select(ENTRY_COLUMNS)
+			.eq("short_id", c.req.param("id"))
+			.eq("is_public", true)
+			.single();
+		if (error || !data) return c.json({ error: "Entry not found" }, 404, CORS);
+		return c.json(data, 200, CORS);
+	} catch {
+		return c.json({ error: "Failed to fetch entry" }, 500, CORS);
+	}
+});
+
 app.get("/health", async (c) => {
 	try {
 		const db = getDb(c.env);
-		const { error } = await db.from("users").select("id", { count: "exact", head: true });
+		const { error } = await db.from("users").select("id").limit(1).single();
 		if (error) return c.json({ status: "error", db: error.message }, 500);
 		return c.json({ status: "ok" });
 	} catch (e) {

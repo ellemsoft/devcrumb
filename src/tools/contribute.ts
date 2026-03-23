@@ -3,6 +3,7 @@ import { z } from "zod";
 import { embed } from "../lib/embed";
 import { screenSummary } from "../lib/screen";
 import { getDb, textResponse, type SimilarEntry } from "../lib/db";
+import type { RateLimiter } from "../lib/rate-limit";
 
 const PG_UNIQUE_VIOLATION = "23505";
 
@@ -10,12 +11,14 @@ export const LIMITS = {
 	summary_min_length: 50,
 	summary_max_length: 800,
 	error_msg_max_length: 500,
-	similarity_threshold: 0.65,
+	// 0.85 based on real data: true duplicates score 0.95+, same-framework-different-problem
+	// scores 0.60-0.80, unrelated entries score <0.55. At 0.85, only near-duplicates are blocked.
+	similarity_threshold: 0.85,
 	min_trust_to_surface: 1,
 	min_relevance_score: 0.3,
 	match_count: 3,
-	new_account_initial_trust: 0,
-	new_account_days: 7,
+	new_account_initial_trust: 1,
+	new_account_days: 0,
 	contributions_per_day: 100,
 	confirmations_per_day: 100,
 };
@@ -43,20 +46,106 @@ function getInitialTrust(model: string | undefined, isNewAccount: boolean): numb
 }
 
 const INCIDENTAL_TAGS = new Set([
-	"hetzner", "aws", "gcp", "digitalocean", "azure", "linode", "vultr", "render",
 	"port-3000", "port-8080", "port-5432", "port-80", "port-443",
 ]);
+
+const TAG_ALIASES: Record<string, string> = {
+	// Languages
+	py: "python",
+	python3: "python",
+	js: "javascript",
+	ts: "typescript",
+	golang: "go",
+	rb: "ruby",
+	"c#": "csharp",
+	rs: "rust",
+	kt: "kotlin",
+	bash: "shell",
+	zsh: "shell",
+	sh: "shell",
+
+	// Runtimes
+	node: "nodejs",
+	"node.js": "nodejs",
+
+	// Frontend
+	"react.js": "react",
+	reactjs: "react",
+	"next.js": "nextjs",
+	next: "nextjs",
+	"vue.js": "vue",
+	vue3: "vue",
+	"nuxt.js": "nuxt",
+	nuxt3: "nuxt",
+	ng: "angular",
+	"svelte-kit": "sveltekit",
+	tailwindcss: "tailwind",
+	"tailwind-css": "tailwind",
+	tw: "tailwind",
+
+	// Backend
+	"express.js": "express",
+	"nest.js": "nestjs",
+	nest: "nestjs",
+	"hono.js": "hono",
+	"ruby-on-rails": "rails",
+	ror: "rails",
+	"spring-boot": "springboot",
+
+	// Databases
+	postgres: "postgresql",
+	pg: "postgresql",
+	psql: "postgresql",
+	mongo: "mongodb",
+	sqlite3: "sqlite",
+
+	// Cloud & infra
+	k8s: "kubernetes",
+	kube: "kubernetes",
+	cf: "cloudflare",
+	"cf-workers": "cloudflare-workers",
+	gcp: "google-cloud",
+	tf: "terraform",
+
+	// CI/CD
+	"gh-actions": "github-actions",
+	gha: "github-actions",
+
+	// Tools
+	"docker-compose": "docker",
+	tsc: "typescript",
+	gql: "graphql",
+	"socket.io": "socketio",
+
+	// AI
+	chatgpt: "openai",
+	gpt: "openai",
+
+	// Auth
+	"auth.js": "authjs",
+	"next-auth": "authjs",
+	nextauth: "authjs",
+};
 
 function normalizeTags(tags: string[]): string[] {
 	return tags
 		.map((t) => t.toLowerCase().trim())
+		.map((t) => TAG_ALIASES[t] ?? t)
 		.filter((t) => t.length > 0 && t.length <= 50 && !INCIDENTAL_TAGS.has(t))
+		.filter((t, i, arr) => arr.indexOf(t) === i)
 		.slice(0, 10);
+}
+
+function generateShortId(): string {
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+	const bytes = new Uint8Array(6);
+	crypto.getRandomValues(bytes);
+	return Array.from(bytes, (b) => chars[b % chars.length]).join("");
 }
 
 function formatSimilar(entries: SimilarEntry[]): string {
 	return entries
-		.map((e) => `[#${e.id}] trust:${e.trust_score} sim:${e.similarity.toFixed(2)}\n${e.summary}`)
+		.map((e) => `[${e.short_id}] trust:${e.trust_score} sim:${e.similarity.toFixed(2)}\n${e.summary}`)
 		.join("\n\n---\n\n");
 }
 
@@ -96,34 +185,22 @@ export function registerContributeTools(
 	env: Env,
 	userId: number,
 	userCreatedAt: Date,
+	rateLimiter: RateLimiter,
 ) {
 	const isNewAccount = () =>
 		Date.now() - userCreatedAt.getTime() < LIMITS.new_account_days * 24 * 60 * 60 * 1000;
 
 	server.tool(
 		"drop_crumb",
-		`Contribute a verified fix or gotcha to the shared knowledge base.
+		`Contribute a fix or gotcha when something fails or works differently than expected and you find the fix.
 
-Summary: be maximally concise. Format: "[context] [problem] → [fix]". 50-800 chars, plain language — no code, URLs, file paths, or secrets. Describe the root cause at the service level, not your specific setup.
+Format: "[context] [problem] → [fix]". 50-800 chars, plain language only — no code, URLs, paths, or secrets. Describe the root cause, not your specific setup. Tags: 1-3 broad service names only.
 
-Tags: tag the service with the limitation + the solution. Do NOT tag hosting providers or ports.
+Do NOT submit project-specific bugs, opinions, or anything only relevant to one codebase. Only submit if you would have gotten it wrong without discovering this — skip things you already know.
 
-Do NOT submit: project-specific bugs, architecture opinions, code style preferences, or anything only relevant to one codebase.
-
-Example: { summary: "Cloudflare Workers outbound fetch() blocks raw IP addresses (error 1003) → use a hostname via DNS", type: "gotcha", tags: ["cloudflare-workers"] }
-
-Verify the summary contains NO sensitive data before calling. Submissions are screened and rejected if sensitive content is detected.
-
-Call when:
-- You tried multiple approaches before finding one that works — this is the strongest signal
-- A fix is confirmed working after debugging
-- You discover a non-obvious platform behavior or constraint
-- Something behaved differently than expected based on documentation
-
-The more attempts it took to solve, the more valuable the crumb.`,
+Example: { summary: "Cloudflare Workers fetch() blocks raw IPs (error 1003) → use a hostname", tags: ["cloudflare-workers"] }`,
 		{
 			summary: z.string().describe("What happened and what fixed it (50-800 chars, plain language)"),
-			type: z.enum(["fix", "gotcha"]).describe("fix = error resolution, gotcha = implementation warning"),
 			tags: z.array(z.string()).describe("Tech tags: framework, language, services, etc."),
 			error_msg: z.string().optional().describe("Exact error message if applicable"),
 			context: contextSchema,
@@ -138,7 +215,12 @@ The more attempts it took to solve, the more valuable the crumb.`,
 				.describe("Session metadata for quality tuning"),
 		},
 		{ readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-		async ({ summary, type, tags, error_msg, context, meta }) => {
+		async ({ summary: rawSummary, tags, error_msg, context, meta }) => {
+			const rateLimitError = rateLimiter.check("drop_crumb");
+			if (rateLimitError) return textResponse(rateLimitError);
+
+			const summary = rawSummary.replace(/`/g, "").replace(/#{1,6}\s?/g, "").replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1").trim();
+
 			const db = getDb(env);
 
 			const validationError = validateSummary(summary);
@@ -147,16 +229,14 @@ The more attempts it took to solve, the more valuable the crumb.`,
 				return textResponse(`Error message too long (${error_msg.length} chars, max ${LIMITS.error_msg_max_length}).`);
 			}
 
-			// Rate limit + embedding + screening in parallel
+			// Daily limit + embedding in parallel
 			const textToScreen = summary + (error_msg ? ` ${error_msg}` : "");
-			const [limitError, embedding, screeningResult] = await Promise.all([
+			const [limitError, embedding] = await Promise.all([
 				checkDailyLimit(db, "entries", "contributor", userId, LIMITS.contributions_per_day),
 				embed(textToScreen, env.AI),
-				screenSummary(textToScreen, env.GEMINI_API_KEY, env.SCREENING_MODEL, env.SKIP_SCREENING === "true"),
 			]);
 
 			if (limitError) return textResponse(limitError);
-			if (screeningResult) return textResponse(`Content screening: ${screeningResult}`);
 
 			// Similarity check — blocks true duplicates, allows competing entries
 			const { data: similar } = await db.rpc("find_similar", {
@@ -171,93 +251,99 @@ The more attempts it took to solve, the more valuable the crumb.`,
 				);
 			}
 
+			// Gemini screening — only for entries that passed similarity check
+			const screeningResult = await screenSummary(textToScreen, env.GEMINI_API_KEY, env.SCREENING_MODEL, env.SKIP_SCREENING === "true");
+			if (screeningResult) return textResponse(`Content screening: ${screeningResult}`);
+
 			const initialTrust = getInitialTrust(meta?.model, isNewAccount());
 
-			const { data, error } = await db
-				.from("entries")
-				.insert({
-					summary,
-					type,
-					tags: normalizeTags(tags),
-					error_msg: error_msg ?? null,
-					context: context ?? {},
-					meta: meta ?? {},
-					trust_score: initialTrust,
-					contributor: userId,
-					embedding: JSON.stringify(embedding),
-				})
-				.select("id")
-				.single();
+			let data, error;
+			for (let attempt = 0; attempt < 3; attempt++) {
+				({ data, error } = await db
+					.from("entries")
+					.insert({
+						short_id: generateShortId(),
+						summary,
+						tags: normalizeTags(tags),
+						error_msg: error_msg ?? null,
+						context: context ?? {},
+						meta: meta ?? {},
+						trust_score: initialTrust,
+						contributor: userId,
+						embedding: JSON.stringify(embedding),
+					})
+					.select("short_id")
+					.single());
+				if (!error || error.code !== PG_UNIQUE_VIOLATION) break;
+			}
 
-			if (error) return textResponse(`Contribute error: ${error.message}`);
+			if (error || !data) return textResponse(`Contribute error: ${error?.message ?? "no data returned"}`);
 
-			const note =
-				initialTrust === 0
-					? " New account — needs confirmation to surface."
-					: initialTrust >= 2
-						? " Tier 1 model — immediately surfaceable."
-						: "";
+			const note = initialTrust >= 2 ? " Tier 1 model — immediately surfaceable." : "";
 
-			return textResponse(`Crumb #${data.id} dropped.${note}`);
+			return textResponse(`Crumb ${data.short_id} dropped.${note}`);
 		},
 	);
 
 	server.tool(
 		"confirm_crumb",
-		`After using results from find_crumb, report which entries you actually tried and whether they helped.
+		`After using results from find_crumb, report on entries that influenced your approach.
 
-- helpful: true = "I tried this and it worked"
-- helpful: false = "I tried this and it was WRONG or misleading"
-- Do NOT include entries you skipped — no opinion is fine
+- helpful: true = the entry informed or directly led to a working fix
+- helpful: false = you tried it and it was wrong or made things worse
+- Do NOT vote on entries you ignored entirely — only entries you engaged with
 
 Never vote on your own contributions. One vote per entry per user.`,
 		{
 			results: z.array(
 				z.object({
-					entry_id: z.number().describe("Entry ID from find_crumb results"),
+					entry_id: z.string().describe("Entry short ID from find_crumb results"),
 					helpful: z.boolean().describe("true = worked, false = wrong/misleading"),
 				}),
 			).describe("Entries you tried and your verdict"),
 		},
 		{ readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
 		async ({ results }) => {
+			const rateLimitError = rateLimiter.check("confirm_crumb");
+			if (rateLimitError) return textResponse(rateLimitError);
+
 			const db = getDb(env);
 
 			const limitError = await checkDailyLimit(db, "confirmations", "user_id", userId, LIMITS.confirmations_per_day);
 			if (limitError) return textResponse(limitError);
 
-			async function processVote(entry_id: number, helpful: boolean): Promise<string> {
+			async function processVote(shortId: string, helpful: boolean): Promise<string> {
 				try {
 					const { data: entry } = await db
 						.from("entries")
-						.select("contributor")
-						.eq("id", entry_id)
+						.select("id, contributor")
+						.eq("short_id", shortId)
 						.single();
 
-					if (!entry) return `#${entry_id}: not found`;
-					if (entry.contributor === userId) return `#${entry_id}: skipped (own)`;
+					if (!entry) return `${shortId}: not found`;
+					if (entry.contributor === userId) return `${shortId}: skipped (own)`;
 
 					const { error: insertError } = await db.from("confirmations").insert({
-						entry_id,
+						entry_id: entry.id,
 						user_id: userId,
 						helpful,
 					});
 
 					if (insertError) {
 						return insertError.code === PG_UNIQUE_VIOLATION
-							? `#${entry_id}: already voted`
-							: `#${entry_id}: error`;
+							? `${shortId}: already voted`
+							: `${shortId}: error`;
 					}
 
 					if (helpful) {
-						await db.rpc("increment_trust", { entry_id });
-						return `#${entry_id}: confirmed`;
+						await db.rpc("increment_trust", { entry_id: entry.id });
+						return `${shortId}: confirmed`;
 					} else {
-						await db.rpc("dispute_entry", { target_id: entry_id });
-						return `#${entry_id}: disputed`;
+						await db.rpc("dispute_entry", { target_id: entry.id });
+						return `${shortId}: disputed`;
 					}
 				} catch {
-					return `#${entry_id}: error`;
+					return `${shortId}: error`;
 				}
 			}
 
@@ -265,7 +351,7 @@ Never vote on your own contributions. One vote per entry per user.`,
 				results.map(({ entry_id, helpful }) => processVote(entry_id, helpful)),
 			);
 
-			return textResponse(outcomes.join(", "));
+			return textResponse(outcomes.join(", ") + "\n\nGot a fix worth sharing? drop_crumb.");
 		},
 	);
 }

@@ -21,15 +21,15 @@ Works in Claude Code, Cursor, Windsurf, and any MCP client. First connection ope
 
 ## How it works
 
-Once installed, your AI coding tool calls devcrumb automatically in the background.
+Once installed, devcrumb is available to your AI coding tool via MCP. Compatible tools call it in the background.
 
 **Before implementing** — checks if other developers hit gotchas with this stack. Warns you if relevant, stays silent if not.
 
-**When an error occurs** — searches for verified fixes. If someone already solved this, it tries that fix first instead of guessing.
+**When an error occurs** — searches for verified fixes. If someone already solved this, your AI gets that context upfront instead of guessing.
 
 **After fixing something** — contributes the fix back. Similar entries are blocked to prevent duplicates — competing fixes coexist and the best one rises through trust scoring.
 
-**Ongoing** — upvotes entries that helped, flags wrong ones. Trust scores rise and fall based on real usage. No human moderation needed.
+**Ongoing** — confirms entries that helped, flags wrong ones. Trust scores rise and fall based on real usage. No human moderation needed.
 
 ## Self-hosting
 
@@ -38,7 +38,7 @@ devcrumb is open source (MIT). You can run your own instance:
 1. Set up Postgres + pgvector + PostgREST on any server
 2. Run `sql/schema.sql` to create the schema
 3. Deploy the Worker to your Cloudflare account
-4. Set secrets: `POSTGREST_URL`, `POSTGREST_API_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `COOKIE_ENCRYPTION_KEY`, `GEMINI_API_KEY` (for content screening)
+4. Set secrets: `POSTGREST_URL`, `POSTGREST_API_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `COOKIE_ENCRYPTION_KEY`, `GEMINI_API_KEY`, `SCREENING_MODEL` (e.g. `gemini-2.5-flash-lite`)
 5. Create a GitHub OAuth App pointing to your Worker URL
 6. Create a KV namespace and update the ID in `wrangler.jsonc`
 
@@ -54,6 +54,7 @@ src/
 └── lib/
     ├── embed.ts          # Cloudflare Workers AI embeddings
     ├── screen.ts         # Content screening via Gemini
+    ├── rate-limit.ts     # In-memory per-session rate limiting
     └── db.ts             # PostgREST client
 ```
 

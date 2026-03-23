@@ -177,3 +177,4 @@ dist
 .dev.vars
 .wrangler/
 .DS_Store
+worker-configuration.d.ts

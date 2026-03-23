@@ -5,6 +5,7 @@ import app from "./app";
 import { registerFindTool } from "./tools/find";
 import { registerContributeTools } from "./tools/contribute";
 import { getDb } from "./lib/db";
+import { RateLimiter } from "./lib/rate-limit";
 
 export type Props = Record<string, unknown> & {
 	githubId: string;
@@ -12,18 +13,16 @@ export type Props = Record<string, unknown> & {
 };
 
 export class DevCrumbMCP extends McpAgent<Env, unknown, Props> {
+	private rateLimiter = new RateLimiter();
+
 	server = new McpServer(
 		{ name: "devcrumb", version: "0.1.0" },
 		{
 			instructions: `devcrumb is a shared knowledge base of developer fixes and gotchas.
 
-find_crumb: Call before writing code, running commands, or configuring anything.
+find_crumb before starting implementation or debugging. confirm_crumb after acting on results.
 
-drop_crumb: Call when you fix an error, change approach after something failed, or discover a constraint that wasn't in the docs.
-
-confirm_crumb: Call after acting on find_crumb results — report what helped and what didn't.
-
-These are not optional.`,
+After implementing, consider: did I discover unexpected behavior or find a non-obvious fix? If yes, drop_crumb before moving on.`,
 		},
 	);
 
@@ -31,7 +30,6 @@ These are not optional.`,
 		const env = this.env;
 		const props = this.props!;
 
-		// Ensure user exists in DB
 		const db = getDb(env);
 		const { data: user, error } = await db
 			.from("users")
@@ -49,9 +47,8 @@ These are not optional.`,
 		const userId: number = user.id;
 		const userCreatedAt = new Date(user.created_at);
 
-		// Register tools
-		registerFindTool(this.server, env);
-		registerContributeTools(this.server, env, userId, userCreatedAt);
+		registerFindTool(this.server, env, this.rateLimiter);
+		registerContributeTools(this.server, env, userId, userCreatedAt, this.rateLimiter);
 	}
 }
 
@@ -72,8 +69,6 @@ export default {
 		const { error } = await db.rpc("decay_trust");
 		if (error) {
 			console.error(`[decay_trust] failed:`, error.message);
-		} else {
-			console.log(`[decay_trust] ran at ${new Date(event.scheduledTime).toISOString()}`);
 		}
 	},
 };

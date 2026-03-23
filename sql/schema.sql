@@ -12,7 +12,7 @@ CREATE TABLE users (
 -- Main entries table
 CREATE TABLE entries (
   id              bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-  type            text NOT NULL CHECK (type IN ('fix', 'gotcha')),
+  short_id        text UNIQUE NOT NULL,
   summary         text NOT NULL,
   error_msg       text,
   tags            text[] DEFAULT '{}',
@@ -50,12 +50,11 @@ CREATE OR REPLACE FUNCTION find_crumbs(
   query_embedding vector(384),
   match_count     int DEFAULT 3,
   min_trust       int DEFAULT 1,
-  entry_type      text DEFAULT NULL,
   filter_tags     text[] DEFAULT NULL
 )
 RETURNS TABLE (
   id              bigint,
-  type            text,
+  short_id        text,
   summary         text,
   tags            text[],
   trust_score     integer,
@@ -68,7 +67,7 @@ LANGUAGE plpgsql AS $$
 BEGIN
   RETURN QUERY
   SELECT
-    e.id, e.type, e.summary, e.tags,
+    e.id, e.short_id, e.summary, e.tags,
     e.trust_score, e.dispute_count, e.context,
     1 - (e.embedding <=> query_embedding) AS similarity,
     -- effective_score: 60% similarity, 30% trust (capped at 20), 10% dispute penalty
@@ -79,7 +78,6 @@ BEGIN
   FROM entries e
   WHERE e.is_public = true
     AND e.trust_score >= min_trust
-    AND (entry_type IS NULL OR e.type = entry_type)
     AND (filter_tags IS NULL OR e.tags && filter_tags)
   ORDER BY effective_score DESC
   LIMIT match_count;
@@ -118,7 +116,7 @@ CREATE OR REPLACE FUNCTION find_similar(
 )
 RETURNS TABLE (
   id          bigint,
-  type        text,
+  short_id    text,
   summary     text,
   tags        text[],
   trust_score integer,
@@ -128,7 +126,7 @@ LANGUAGE plpgsql AS $$
 BEGIN
   RETURN QUERY
   SELECT
-    e.id, e.type, e.summary, e.tags, e.trust_score,
+    e.id, e.short_id, e.summary, e.tags, e.trust_score,
     1 - (e.embedding <=> query_embedding) AS similarity
   FROM entries e
   WHERE e.is_public = true
@@ -138,7 +136,36 @@ BEGIN
 END;
 $$;
 
--- Trust decay — run nightly via Supabase scheduled function
+-- Random public entry (used by website)
+CREATE OR REPLACE FUNCTION get_random_entry()
+RETURNS TABLE (
+  short_id    text,
+  summary     text,
+  tags        text[],
+  trust_score integer,
+  created_at  timestamptz
+)
+LANGUAGE sql STABLE AS $$
+  SELECT short_id, summary, tags, trust_score, created_at
+  FROM entries
+  WHERE is_public = true AND trust_score >= 1
+  ORDER BY random()
+  LIMIT 1;
+$$;
+
+-- Top tags by entry count (used by website)
+CREATE OR REPLACE FUNCTION get_top_tags(limit_count int DEFAULT 40)
+RETURNS TABLE (tag text)
+LANGUAGE sql STABLE AS $$
+  SELECT unnest(tags) AS tag
+  FROM entries
+  WHERE is_public = true
+  GROUP BY tag
+  ORDER BY count(*) DESC
+  LIMIT limit_count;
+$$;
+
+-- Trust decay — run nightly via Cloudflare cron trigger
 -- Entries older than 90 days with no confirmations in 30 days decay by 1
 -- Never goes below 1. Outdated knowledge sinks, active knowledge stays.
 CREATE OR REPLACE FUNCTION decay_trust()

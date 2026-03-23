@@ -21,7 +21,8 @@
 	"kv_namespaces": [
 		{
 			"binding": "OAUTH_KV",
-			"id": "d9e1a8567e23440cac455af58c64fd3b"
+			// Create a KV namespace: wrangler kv namespace create OAUTH_KV
+			"id": "YOUR_KV_NAMESPACE_ID"
 		}
 	],
 	"ai": {

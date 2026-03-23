@@ -11,7 +11,7 @@ export function getDb(env: Env): PostgrestClient {
 // Return type from find_crumbs RPC
 export interface EntryRow {
 	id: number;
-	type: string;
+	short_id: string;
 	summary: string;
 	tags: string[];
 	context: Record<string, unknown>;
@@ -24,7 +24,7 @@ export interface EntryRow {
 // Return type from find_similar RPC
 export interface SimilarEntry {
 	id: number;
-	type: string;
+	short_id: string;
 	summary: string;
 	tags: string[];
 	trust_score: number;
