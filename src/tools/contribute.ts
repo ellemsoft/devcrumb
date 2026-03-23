@@ -11,9 +11,9 @@ export const LIMITS = {
 	summary_min_length: 50,
 	summary_max_length: 800,
 	error_msg_max_length: 500,
-	// 0.85 based on real data: true duplicates score 0.95+, same-framework-different-problem
-	// scores 0.60-0.80, unrelated entries score <0.55. At 0.85, only near-duplicates are blocked.
-	similarity_threshold: 0.85,
+	// True duplicates score 0.95+, better-phrased versions of the same fix 0.85-0.94,
+	// same-framework-different-problem 0.60-0.80. At 0.90, competing fixes can coexist.
+	similarity_threshold: 0.90,
 	min_trust_to_surface: 1,
 	min_relevance_score: 0.3,
 	match_count: 3,
