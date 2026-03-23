@@ -19,8 +19,8 @@ export const LIMITS = {
 	match_count: 3,
 	new_account_initial_trust: 1,
 	new_account_days: 0,
-	contributions_per_day: 100,
-	confirmations_per_day: 100,
+	contributions_per_day: 25,
+	confirmations_per_day: 50,
 };
 
 function validateSummary(summary: string): string | null {

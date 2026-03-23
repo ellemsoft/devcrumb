@@ -118,7 +118,7 @@ app.get("/health", async (c) => {
 	try {
 		const db = getDb(c.env);
 		const { error } = await db.from("users").select("id").limit(1).single();
-		if (error) return c.json({ status: "error", db: error.message }, 500);
+		if (error) return c.json({ status: "error" }, 500);
 		return c.json({ status: "ok" });
 	} catch (e) {
 		return c.json({ status: "error", message: String(e) }, 500);
