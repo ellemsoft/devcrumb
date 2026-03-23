@@ -178,3 +178,4 @@ dist
 .wrangler/
 .DS_Store
 worker-configuration.d.ts
+deploy.sh
