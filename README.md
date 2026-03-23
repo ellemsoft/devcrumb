@@ -4,6 +4,8 @@ Stop debugging errors that other developers already solved.
 
 devcrumb is an MCP server that gives your AI coding tools access to a shared knowledge base of real-world fixes and gotchas, verified by usage. Fully automatic — no extra steps.
 
+**[devcrumb.dev](https://devcrumb.dev)**
+
 ## Setup
 
 ```json
